@@ -26,13 +26,6 @@ def main():
     (trainImages, testImages) = split[:2]
     (trainMasks, testMasks) = split[2:]
 
-    # write the testing image paths to disk so that we can use then
-    # when evaluating/testing our model
-    # print("[INFO] saving testing image paths...")
-    # f = open(config.TEST_PATHS, "w")
-    # f.write("\n".join(testImages))
-    # f.close()
-
 
     # define transformations
     transform = transforms.Compose([transforms.ToPILImage(),
@@ -49,103 +42,96 @@ def main():
     print(f"[INFO] found {len(testDS)} examples in the test set...")
 
     # create the training and test data loaders
-    trainLoader = DataLoader(trainDS, shuffle=True,
-        batch_size=config.BATCH_SIZE, pin_memory=config.PIN_MEMORY,
-        num_workers=os.cpu_count())
-
-    testLoader = DataLoader(testDS, shuffle=False,
-        batch_size=config.BATCH_SIZE, pin_memory=config.PIN_MEMORY,
-        num_workers=os.cpu_count())
+    trainLoader = DataLoader(trainDS, shuffle=True, batch_size=config.BATCH_SIZE, drop_last=False)
+    testLoader = DataLoader(testDS, shuffle=False, batch_size=config.BATCH_SIZE, drop_last=False)
 
     # initialize our UNet model
     unet = UNet().to(config.DEVICE)
 
     # initialize loss function and optimizer
-    lossFunc = BCEWithLogitsLoss()
-    opt = Adam(unet.parameters(), lr=config.INIT_LR)
+    loss_fn = BCEWithLogitsLoss(pos_weight=torch.tensor([2]))
+    optimizer = Adam(unet.parameters(), lr=config.INIT_LR)
 
-    # calculate steps per epoch for training and test set
-    trainSteps = len(trainDS) // config.BATCH_SIZE
-    testSteps = len(testDS) // config.BATCH_SIZE
+    #initialization
+    num_epochs=40
+    loss_hist=[0]*(num_epochs) #loss function history for training data
+    loss_hist_test=[0]*(num_epochs) #loss function history for test data
+    accuracy_hist=[0]*(num_epochs) #accuracy history for training data
+    accuracy_hist_test=[0]*(num_epochs) #accuracy history for test data
 
-    # initialize a dictionary to store training history
-    H = {"train_loss": [], "test_loss": []}
 
-    # loop over epochs
-    print("[INFO] training the network...")
-    startTime = time.time()
-    for e in tqdm(range(config.NUM_EPOCHS)):
-        # set the model in training mode
+    test_di=iter(testLoader)
+    test_dat=next(test_di)
+    torch.sum(test_dat[1]==0)+torch.sum(test_dat[1]==1)
+    x_test=test_dat[0]
+    y_test=test_dat[1]
+    y_test[1,:,:]
+    torch.unique(y_test)
+
+    for epoch in range(num_epochs):
+
+        if epoch==0:
+            print("epoch: ",epoch,sep="",end="")
+        else:
+            print("")
+            print("training loss: ", round(loss_hist[epoch - 1], 2),
+                "; test loss: ", round(loss_hist_test[epoch - 1], 2), sep="")
+            print("training accuracy: ",round(accuracy_hist[epoch-1],2),
+                "; test accuracy: ",round(accuracy_hist_test[epoch-1],2),sep="")
+            print("epoch: ",epoch,sep="",end="")
+
         unet.train()
-        
-        # initialize the total training and validation loss
-        totalTrainLoss = 0
-        totalTestLoss = 0
-        
-        # loop over the training set
-        for (i, (x, y)) in enumerate(trainLoader):
-            # send the input to the device
-            (x, y) = (x.to(config.DEVICE), y.to(config.DEVICE))
-            
-            # perform a forward pass and calculate the training loss
-            pred = unet(x)
-            loss = lossFunc(pred, y)
-            
-            # first, zero out any previously accumulated gradients, then
-            # perform backpropagation, and then update model parameters
-            opt.zero_grad()
+        for x_batch,y_batch in trainLoader:
+            print(".",end="")
+
+            #make a prediction and get the loss
+            optimizer.zero_grad()
+            pred=unet(x_batch)
+            loss = loss_fn(pred, y_batch.float())
+
+            #gradients and then optimizer
             loss.backward()
-            opt.step()
-            
-            # add the loss to the total training loss so far
-            totalTrainLoss += loss
-            
-        # switch off autograd
+            optimizer.step()
+
+            #update history information on training data for this epoch
+            loss_hist[epoch]+=loss.item()*y_batch.size(0)
+            pred_labels=(torch.sigmoid(pred)>0.5).float()
+            correct=(pred_labels.squeeze(1)==y_batch).float().sum()
+            accuracy_hist[epoch]+=correct.item()
+
+        #normalize loss and accuracy data for the training data for the epoch
+        loss_hist[epoch] /= len(trainLoader.dataset)
+        accuracy_hist[epoch] /= (len(trainLoader.dataset)*y_batch.shape[-1]*y_batch.shape[-2])
+
+        #now get loss and accuracy data for the test
+        unet.eval()
         with torch.no_grad():
-            # set the model in evaluation mode
-            unet.eval()
-            
-            # loop over the validation set
-            for (x, y) in testLoader:
-                
-                # send the input to the device
-                (x, y) = (x.to(config.DEVICE), y.to(config.DEVICE))
-                
-                # make the predictions and calculate the validation loss
-                pred = unet(x)
-                totalTestLoss += lossFunc(pred, y)
-                
-        # calculate the average training and validation loss
-        avgTrainLoss = totalTrainLoss / trainSteps
-        avgTestLoss = totalTestLoss / testSteps
-        
-        # update our training history
-        H["train_loss"].append(avgTrainLoss.cpu().detach().numpy())
-        H["test_loss"].append(avgTestLoss.cpu().detach().numpy())
-        
-        # print the model training and validation information
-        print("[INFO] EPOCH: {}/{}".format(e + 1, config.NUM_EPOCHS))
-        print("Train loss: {:.6f}, Test loss: {:.4f}".format(
-            avgTrainLoss, avgTestLoss))
-        
-    # display the total time needed to perform the training
-    endTime = time.time()
-    print("[INFO] total time taken to train the model: {:.2f}s".format(
-        endTime - startTime))
+            pred_test=unet(x_test)
+            loss_hist_test[epoch]=loss_fn(pred_test,y_test).item()
+            pred_test_labels = (torch.sigmoid(pred_test) > 0.5).float()
+            accuracy_hist_test[epoch] = (pred_test_labels == y_test).float().mean().item()
 
-    # plot the training loss
-    plt.style.use("ggplot")
-    plt.figure()
-    plt.plot(H["train_loss"], label="train_loss")
-    plt.plot(H["test_loss"], label="test_loss")
-    plt.title("Training Loss on Dataset")
-    plt.xlabel("Epoch #")
-    plt.ylabel("Loss")
-    plt.legend(loc="lower left")
-    plt.show()
+    print("")
+    print("training loss: ",round(loss_hist[epoch],2),
+        "; test loss: ",round(loss_hist_test[epoch],2),sep="")
+    print("training accuracy: ",round(accuracy_hist[epoch],2),
+        "; test accuracy: ",round(accuracy_hist_test[epoch],2),sep="")
 
-    # # serialize the model to disk
-    # torch.save(unet, config.MODEL_PATH)
+
+    #**Now make plots of results to examine some of them
+
+    unet.eval()
+    with torch.no_grad():
+        pred=unet(x_test)
+        pred=(torch.sigmoid(pred)>0.5).float()
+
+        for ind in range(30):
+            fig, axs=plt.subplots(1,3,figsize=(12,4))
+            axs[0].imshow(x_test[ind,:,:,:].permute(1,2,0))
+            axs[1].imshow(pred[ind, :, :, :].permute(1,2,0))
+            axs[2].imshow(y_test[ind].squeeze())
+            plt.show()
+
 
 if __name__ == "__main__":
     main()

@@ -13,10 +13,10 @@ class Block(Module):
 	def __init__(self, inChannels, outChannels):
 		super().__init__()
 		# store the convolution and RELU layers
-		self.conv1 = Conv2d(inChannels, outChannels, 3)
+		self.conv1 = Conv2d(inChannels, outChannels, 3, stride=1, padding="same")
 		self.relu = ReLU()
-		self.conv2 = Conv2d(outChannels, outChannels, 3)
-		
+		self.conv2 = Conv2d(outChannels, outChannels, 3, stride=1, padding="same")
+
 	def forward(self, x):
 		# apply CONV => RELU => CONV block to the inputs and return it
 		return self.conv2(self.relu(self.conv1(x)))

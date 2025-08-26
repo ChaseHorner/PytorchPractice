@@ -7,6 +7,7 @@ class SegmentationDataset(Dataset):
 		self.imagePaths = imagePaths
 		self.maskPaths = maskPaths
 		self.transforms = transforms
+		
 	def __len__(self):
 		# return the number of total samples contained in the dataset
 		return len(self.imagePaths)
