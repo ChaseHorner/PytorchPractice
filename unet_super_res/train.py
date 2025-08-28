@@ -1,0 +1,110 @@
+import time
+import torch
+from torcheval.metrics.functional import peak_signal_noise_ratio
+from torchmetrics.image import StructuralSimilarityIndexMeasure
+
+ssim_metric = StructuralSimilarityIndexMeasure(data_range=2.0)
+
+def train_epoch(model, optimizer, criterion, train_dataloader, device):
+    model.train()
+    total_psnr, total_ssim, total_count = 0, 0, 0
+    losses = []
+
+    for inputs, labels in train_dataloader:
+        inputs = inputs.to(device)
+        labels = labels.to(device)
+
+        optimizer.zero_grad()
+
+        predictions = model(inputs)
+
+        # compute loss
+        loss = criterion(predictions, labels)
+        losses.append(loss.item())
+
+        # backward
+        loss.backward()
+        optimizer.step()
+
+        total_psnr += peak_signal_noise_ratio(predictions, labels).mean().item()
+        total_ssim += ssim_metric(predictions, labels).mean().item()
+        total_count += 1
+
+    epoch_psnr = total_psnr / total_count
+    epoch_ssim = total_ssim / total_count
+    epoch_loss = sum(losses) / len(losses)
+    return epoch_psnr, epoch_ssim, epoch_loss
+
+def evaluate_epoch(model, criterion, valid_dataloader, device):
+    model.eval()
+    total_psnr, total_ssim, total_count = 0, 0
+    losses = []
+
+    with torch.no_grad():
+        for inputs, labels in valid_dataloader:
+            inputs = inputs.to(device)
+            labels = labels.to(device)
+
+            predictions = model(inputs)
+
+            loss = criterion(predictions, labels)
+            losses.append(loss.item())
+
+
+            total_psnr +=  peak_signal_noise_ratio(predictions, labels)
+            total_ssim += ssim_metric(predictions, labels)
+            total_count += 1
+
+    epoch_psnr = total_psnr / total_count
+    epoch_ssim = total_ssim / total_count
+    epoch_loss = sum(losses) / len(losses)
+    return epoch_psnr, epoch_ssim, epoch_loss
+
+def train_model(model, model_name, save_model, optimizer, criterion, train_dataloader, valid_dataloader, num_epochs, device):
+    train_psnrs, train_ssims, train_losses = [], [], []
+    eval_psnrs, eval_ssims, eval_losses = [], [], []
+    best_psnr_eval = -1000
+    times = []
+    for epoch in range(1, num_epochs+1):
+        epoch_start_time = time.time()
+        # Training
+        train_psnr, train_ssim, train_loss = train_epoch(model, optimizer, criterion, train_dataloader, device)
+        train_psnrs.append(train_psnr.cpu())
+        train_ssims.append(train_ssim.cpu())
+        train_losses.append(train_loss)
+
+        # Evaluation
+        eval_psnr, eval_ssim, eval_loss = evaluate_epoch(model, criterion, valid_dataloader, device)
+        eval_psnrs.append(eval_psnr.cpu())
+        eval_ssims.append(eval_ssim.cpu())
+        eval_losses.append(eval_loss)
+
+        # Save best model
+        if best_psnr_eval < eval_psnr :
+            torch.save(model.state_dict(), save_model + f'/{model_name}.pt')
+            inputs_t, targets_t = next(iter(valid_dataloader))
+            best_psnr_eval = eval_psnr
+        times.append(time.time() - epoch_start_time)
+        # Print loss, psnr end epoch
+        print("-" * 59)
+        print(
+            "| End of epoch {:3d} | Time: {:5.2f}s | Train psnr {:8.3f} | Train ssim {:8.3f} | Train Loss {:8.3f} "
+            "| Valid psnr {:8.3f} | Valid ssim {:8.3f} | Valid Loss {:8.3f} ".format(
+                epoch, time.time() - epoch_start_time, train_psnr, train_ssim, train_loss, eval_psnr, eval_ssim, eval_loss
+            )
+        )
+        print("-" * 59)
+
+    # Load best model
+    model.load_state_dict(torch.load(save_model + f'/{model_name}.pt'))
+    model.eval()
+    metrics = {
+        'train_psnr': train_psnrs,
+        'train_ssim': train_ssims,
+        'train_loss': train_losses,
+        'valid_psnr': eval_psnrs,
+        'valid_ssim': eval_ssims,
+        'valid_loss': eval_losses,
+        'time': times
+    }
+    return model, metrics
