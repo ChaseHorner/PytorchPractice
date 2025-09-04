@@ -1,0 +1,122 @@
+import torch
+import torch.nn as nn
+import configs
+
+class WeatherCompression(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size):
+        super(WeatherCompression, self).__init__()
+        self.conv = nn.Sequential(
+            nn.Conv1d(in_channels, out_channels, kernel_size),
+            nn.LeakyReLU(),
+            nn.AdaptiveMaxPool1d(1)
+        )
+    def forward(self, x):
+        return self.conv(x).squeeze(-1)
+
+
+class ConvBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size = 3):
+        super(ConvBlock, self).__init__()
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size, 1, kernel_size // 2, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.LeakyReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size, 1, kernel_size // 2, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.LeakyReLU(inplace=True),
+        )
+
+    def forward(self, x):
+        return self.conv(x)
+
+class Encoder(nn.Module):
+    def __init__(self, in_channels, out_channels, scale_size = 2) -> None:
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.MaxPool2d(scale_size),
+            ConvBlock(in_channels, out_channels)
+        )
+
+    def forward(self, x):
+        x = self.encoder(x)
+        return x
+
+class Decoder(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(Decoder, self).__init__()
+        self.conv = nn.Sequential(
+            nn.UpsamplingBilinear2d(scale_factor=2),
+            nn.Conv2d(in_channels, out_channels, 1, 1, 0, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.LeakyReLU(),
+        )
+        self.conv_block = ConvBlock(in_channels, out_channels)
+
+    def forward(self, x, skip):
+        x = self.conv(x)
+        x = torch.concat([x, skip], dim=1)
+        x = self.conv_block(x)
+        return x
+
+class FinalOutput(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(FinalOutput, self).__init__()
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, 1, 1, 0, bias=False),
+        )
+
+    def forward(self, x):
+        return self.conv(x)
+
+class SR_Unet(nn.Module):
+    def __init__(
+            self, 
+            lidar_channels = configs._LIDAR_IN_CHANNELS, 
+            sentinel_channels = configs.SEN_IN_CHANNELS, 
+            weather_channels = configs.WEATHER_IN_CHANNELS, 
+            output_channels=1
+            ):
+        
+        super(SR_Unet, self).__init__()
+
+        self.lidar_channels = lidar_channels
+        self.sentinel_channels = sentinel_channels
+        self.weather_channels = weather_channels
+        self.output_channels = output_channels
+
+        self.in_weather_in_season = WeatherCompression(weather_channels, configs.W1, kernel_size=configs.IN_SEASON_KERNEL_SIZE)
+        self.in_weather_out_season = WeatherCompression(weather_channels, configs.W2, kernel_size=configs.OUT_SEASON_KERNEL_SIZE)
+
+        self.enc_1 = Encoder(lidar_channels, configs.C1)
+        self.enc_2 = Encoder(configs.C1, configs.C2)
+        self.enc_3 = Encoder(configs.C2, configs.C3)
+        self.enc_4 = Encoder(configs.C3 + configs.S1, configs.C4)
+        self.enc_5 = Encoder(configs.C4, configs.C5)
+
+        self.dec_1 = Decoder(configs.C5 + configs.W1 + configs.W2, configs.C4)
+        self.dec_2 = Decoder(configs.C4, configs.C3)
+        self.dec_3 = Decoder(configs.C3, configs.C2)
+        self.dec_4 = Decoder(configs.C2, configs.C1)
+
+    def forward(self, lidar_data, sentinel_data, weather_in_season_data, weather_out_season_data):
+        i1 = x1 = self.in_lidar(lidar_data)
+        i2 = self.in_sentinel(sentinel_data)
+        i3 = self.in_weather_in_season(weather_in_season_data)
+        i4 = self.in_weather_out_season(weather_out_season_data)
+
+        x2 = self.enc_1(x1)
+        x3 = self.enc_2(x2)
+        x4 = self.enc_3(x3)
+
+        x4 = torch.cat([x4, i2], dim=1)
+        x5 = self.enc_4(x4)
+        x6 = self.enc_5(x5)
+
+        x6 = torch.cat([x6, i3, i4], dim=1)
+
+        x = self.dec_1(x6, x5)
+        x = self.dec_2(x, x4)
+        x = self.dec_3(x, x3)
+        x = self.dec_4(x, x2)
+
+        return x
