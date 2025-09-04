@@ -99,10 +99,12 @@ class SR_Unet(nn.Module):
         self.dec_4 = Decoder(configs.C2, configs.C1)
 
     def forward(self, lidar_data, sentinel_data, weather_in_season_data, weather_out_season_data):
-        i1 = x1 = self.in_lidar(lidar_data)
-        i2 = self.in_sentinel(sentinel_data)
+        i1 = x1 = lidar_data
+        i2 = sentinel_data
         i3 = self.in_weather_in_season(weather_in_season_data)
         i4 = self.in_weather_out_season(weather_out_season_data)
+
+
 
         x2 = self.enc_1(x1)
         x3 = self.enc_2(x2)
@@ -112,6 +114,10 @@ class SR_Unet(nn.Module):
         x5 = self.enc_4(x4)
         x6 = self.enc_5(x5)
 
+        i3 = i3.unsqueeze(-1).unsqueeze(-1)
+        i4 = i4.unsqueeze(-1).unsqueeze(-1)
+        i3 = i3.expand(-1, -1, x6.shape[2], x6.shape[3])
+        i4 = i4.expand(-1, -1, x6.shape[2], x6.shape[3])
         x6 = torch.cat([x6, i3, i4], dim=1)
 
         x = self.dec_1(x6, x5)
