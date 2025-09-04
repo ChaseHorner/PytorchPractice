@@ -42,10 +42,10 @@ class Encoder(nn.Module):
         return x
 
 class Decoder(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, scale_size = 2):
         super(Decoder, self).__init__()
         self.conv = nn.Sequential(
-            nn.UpsamplingBilinear2d(scale_factor=2),
+            nn.UpsamplingBilinear2d(scale_factor=scale_size),
             nn.Conv2d(in_channels, out_channels, 1, 1, 0, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.LeakyReLU(),
@@ -89,14 +89,15 @@ class SR_Unet(nn.Module):
 
         self.enc_1 = Encoder(lidar_channels, configs.C1)
         self.enc_2 = Encoder(configs.C1, configs.C2)
-        self.enc_3 = Encoder(configs.C2, configs.C3)
+        self.enc_3 = Encoder(configs.C2, configs.C3, scale_size= 5)
         self.enc_4 = Encoder(configs.C3 + configs.S1, configs.C4)
         self.enc_5 = Encoder(configs.C4, configs.C5)
 
         self.dec_1 = Decoder(configs.C5 + configs.W1 + configs.W2, configs.C4)
         self.dec_2 = Decoder(configs.C4, configs.C3)
-        self.dec_3 = Decoder(configs.C3, configs.C2)
+        self.dec_3 = Decoder(configs.C3, configs.C2, scale_size=5)
         self.dec_4 = Decoder(configs.C2, configs.C1)
+        self.dec_5 = Decoder(configs.C1, self.output_channels)
 
     def forward(self, lidar_data, sentinel_data, weather_in_season_data, weather_out_season_data):
         i1 = x1 = lidar_data
@@ -124,5 +125,6 @@ class SR_Unet(nn.Module):
         x = self.dec_2(x, x4)
         x = self.dec_3(x, x3)
         x = self.dec_4(x, x2)
+        x = self.dec_5(x, x1)
 
         return x
