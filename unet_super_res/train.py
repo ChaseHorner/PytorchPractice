@@ -3,9 +3,9 @@ import torch
 from torcheval.metrics.functional import peak_signal_noise_ratio
 from torchmetrics.image import StructuralSimilarityIndexMeasure
 
-ssim_metric = StructuralSimilarityIndexMeasure(data_range=2.0)
 
 def train_epoch(model, optimizer, criterion, train_dataloader, device):
+    ssim_metric = StructuralSimilarityIndexMeasure(data_range=1.0).to(device)
     model.train()
     total_psnr, total_ssim, total_count = 0, 0, 0
     losses = []
@@ -36,8 +36,9 @@ def train_epoch(model, optimizer, criterion, train_dataloader, device):
     return epoch_psnr, epoch_ssim, epoch_loss
 
 def evaluate_epoch(model, criterion, valid_dataloader, device):
+    ssim_metric = StructuralSimilarityIndexMeasure(data_range=1.0).to(device)
     model.eval()
-    total_psnr, total_ssim, total_count = 0, 0
+    total_psnr, total_ssim, total_count = 0, 0, 0
     losses = []
 
     with torch.no_grad():
@@ -69,15 +70,15 @@ def train_model(model, model_name, save_model, optimizer, criterion, train_datal
         epoch_start_time = time.time()
         # Training
         train_psnr, train_ssim, train_loss = train_epoch(model, optimizer, criterion, train_dataloader, device)
-        train_psnrs.append(train_psnr.cpu())
-        train_ssims.append(train_ssim.cpu())
-        train_losses.append(train_loss)
+        train_psnrs.append(to_float(train_psnr))
+        train_ssims.append(to_float(train_ssim))
+        train_losses.append(to_float(train_loss))
 
         # Evaluation
         eval_psnr, eval_ssim, eval_loss = evaluate_epoch(model, criterion, valid_dataloader, device)
-        eval_psnrs.append(eval_psnr.cpu())
-        eval_ssims.append(eval_ssim.cpu())
-        eval_losses.append(eval_loss)
+        eval_psnrs.append(to_float(eval_psnr))
+        eval_ssims.append(to_float(eval_ssim))
+        eval_losses.append(to_float(eval_loss))
 
         # Save best model
         if best_psnr_eval < eval_psnr :
@@ -108,3 +109,8 @@ def train_model(model, model_name, save_model, optimizer, criterion, train_datal
         'time': times
     }
     return model, metrics
+
+
+
+def to_float(x):
+    return x.item() if torch.is_tensor(x) else float(x)

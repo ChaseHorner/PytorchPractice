@@ -18,8 +18,9 @@ torch.manual_seed(66)
 TRAIN_DATA_PATH = os.path.join('data', 'train')
 VAL_DATA_PATH = os.path.join('data', 'val')
 BATCH_SIZE = 16
-EPOCHS = 40
-MODEL_NAME = 'SR_unet_model_1'
+EPOCHS = 100
+MODEL_NAME = 'SR_unet_model_2'
+DATAPARALLEL = False
 
 # DataLoaders
 train_dataset = ImageDataset(TRAIN_DATA_PATH, is_train=True)
@@ -29,8 +30,10 @@ val_dataset = ImageDataset(VAL_DATA_PATH, is_train=False)
 val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-SR_unet_model = SR_Unet().to(device)
-SR_unet_model.to(device)
+SR_unet_model = SR_Unet()
+if DATAPARALLEL:
+    SR_unet_model = nn.DataParallel(SR_unet_model)
+SR_unet_model.to(device)  
 
 criterion = nn.L1Loss()
 
@@ -77,4 +80,3 @@ plt.title('Loss')
 
 plt.tight_layout()
 plt.savefig(save_model + '/psnr_ssim_loss.png')
-plt.show()
