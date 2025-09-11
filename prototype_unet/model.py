@@ -10,7 +10,7 @@ class WeatherCompression(nn.Module):
             nn.LeakyReLU(),
             nn.Conv1d(out_channels, out_channels, kernel_size, padding=kernel_size // 2),
             nn.LeakyReLU(),
-            nn.AdaptiveMaxPool1d(1) # (b, out_channels, ~ts_len) -> (b, out_channels, ts_len/2)
+            nn.AdaptiveAvgPool1d(1) # (b, out_channels, ~ts_len) -> (b, out_channels, ts_len/2)
         )
 
     def forward(self, x):
@@ -55,7 +55,7 @@ class Decoder(nn.Module):
             nn.LeakyReLU(),
         )
 
-        self.conv_block = ConvBlock(in_channels + skip_channels, out_channels)
+        self.conv_block = ConvBlock(out_channels + skip_channels, out_channels)
 
     def forward(self, x, skip):
         x = self.conv(x)
@@ -101,11 +101,11 @@ class Unet(nn.Module):
         self.enc_7 = Encoder(configs.C6, configs.C7)
         self.enc_8 = Encoder(configs.C7, configs.C8)
 
-        self.dec_8 = Decoder(configs.C8 + configs.W1 + configs.W2, configs.C7, skip_channels=configs.C8)
-        self.dec_7 = Decoder(configs.C7, configs.C6)
-        self.dec_6 = Decoder(configs.C6, configs.C5)
-        self.dec_5 = Decoder(configs.C5, configs.C4)
-        self.dec_4 = Decoder(configs.C4, configs.C3 + configs.S1)
+        self.dec_8 = Decoder(configs.C8 + configs.W1 + configs.W2, configs.C7, skip_channels=configs.C7)
+        self.dec_7 = Decoder(configs.C7, configs.C6, skip_channels=configs.C6)
+        self.dec_6 = Decoder(configs.C6, configs.C5, skip_channels=configs.C5)
+        self.dec_5 = Decoder(configs.C5, configs.C4, skip_channels=configs.C4)
+        self.dec_4 = Decoder(configs.C4, configs.C3 + configs.S1, skip_channels=configs.C3 + configs.S1)
 
         self.final_output = FinalOutput(configs.C3, output_channels)
 
