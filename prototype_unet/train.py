@@ -3,37 +3,53 @@ import torch
 from torcheval.metrics.functional import peak_signal_noise_ratio
 from torchmetrics.image import StructuralSimilarityIndexMeasure
 
+import configs
+
 
 def train_epoch(model, optimizer, criterion, train_dataloader, device):
     ssim_metric = StructuralSimilarityIndexMeasure(data_range=1.0).to(device)
     model.train()
-    total_psnr, total_ssim, total_count = 0, 0, 0
-    losses = []
+    running_psnr, running_ssim, running_count = 0, 0, 0
+    optimizer.zero_grad()
 
-    for inputs, labels in train_dataloader:
-        inputs = inputs.to(device)
+    for step, (lidar, sentinel, in_season, pre_season, labels) in enumerate(train_dataloader):
+        lidar = lidar.to(device)
+        sentinel = sentinel.to(device)
+        in_season = in_season.to(device)
+        pre_season = pre_season.to(device)
         labels = labels.to(device)
 
-        optimizer.zero_grad()
-
-        predictions = model(inputs)
+        predictions = model(lidar, sentinel, in_season, pre_season)
 
         # compute loss
         loss = criterion(predictions, labels)
-        losses.append(loss.item())
+        loss = loss / configs.ACCUMULATION_STEPS
 
         # backward
         loss.backward()
+
+        # Gradient accumulation step
+        if (step + 1) % configs.ACCUMULATION_STEPS == 0:
+            optimizer.step()
+            optimizer.zero_grad()
+
+        running_loss = loss.item() * configs.ACCUMULATION_STEPS
+        running_psnr += peak_signal_noise_ratio(predictions, labels).mean().item()
+        running_ssim += ssim_metric(predictions, labels).mean().item()
+
+
+        # Flush leftover gradients if dataset isn’t divisible by accumulation_steps
+    if (step + 1) % configs.ACCUMULATION_STEPS != 0:
         optimizer.step()
+        optimizer.zero_grad()
 
-        total_psnr += peak_signal_noise_ratio(predictions, labels).mean().item()
-        total_ssim += ssim_metric(predictions, labels).mean().item()
-        total_count += 1
-
-    epoch_psnr = total_psnr / total_count
-    epoch_ssim = total_ssim / total_count
-    epoch_loss = sum(losses) / len(losses)
-    return epoch_psnr, epoch_ssim, epoch_loss
+    # Average over number of batches
+    num_batches = len(train_dataloader)
+    return (
+        running_psnr / num_batches,
+        running_ssim / num_batches,
+        running_loss / num_batches,
+    )
 
 def evaluate_epoch(model, criterion, valid_dataloader, device):
     ssim_metric = StructuralSimilarityIndexMeasure(data_range=1.0).to(device)
@@ -42,11 +58,14 @@ def evaluate_epoch(model, criterion, valid_dataloader, device):
     losses = []
 
     with torch.no_grad():
-        for inputs, labels in valid_dataloader:
-            inputs = inputs.to(device)
+        for lidar, sentinel, in_season, pre_season, labels in valid_dataloader:
+            lidar = lidar.to(device)
+            sentinel = sentinel.to(device)
+            in_season = in_season.to(device)
+            pre_season = pre_season.to(device)
             labels = labels.to(device)
 
-            predictions = model(inputs)
+            predictions = model(lidar, sentinel, in_season, pre_season)
 
             loss = criterion(predictions, labels)
             losses.append(loss.item())
