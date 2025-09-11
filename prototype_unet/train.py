@@ -36,6 +36,7 @@ def train_epoch(model, optimizer, criterion, train_dataloader, device):
         running_loss = loss.item() * configs.ACCUMULATION_STEPS
         running_psnr += peak_signal_noise_ratio(predictions, labels).mean().item()
         running_ssim += ssim_metric(predictions, labels).mean().item()
+        print(f"Training Step [{step+1}/{len(train_dataloader)}]", end = '\r')
 
 
         # Flush leftover gradients if dataset isn’t divisible by accumulation_steps
@@ -102,7 +103,6 @@ def train_model(model, model_name, save_model, optimizer, criterion, train_datal
         # Save best model based on eval loss
         if best_loss_eval < eval_loss :
             torch.save(model.state_dict(), save_model + f'/{model_name}.pt')
-            inputs_t, targets_t = next(iter(valid_dataloader))
             best_loss_eval = eval_loss
         times.append(time.time() - epoch_start_time)
 

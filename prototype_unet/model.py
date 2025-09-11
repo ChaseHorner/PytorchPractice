@@ -79,7 +79,8 @@ class Unet(nn.Module):
             lidar_channels = configs.LIDAR_IN_CHANNELS, 
             sentinel_channels = configs.SEN_IN_CHANNELS, 
             weather_channels = configs.WEATHER_IN_CHANNELS, 
-            output_channels=1
+            output_channels=1,
+            config = configs
             ):
 
         super(Unet, self).__init__()
@@ -89,25 +90,25 @@ class Unet(nn.Module):
         self.weather_channels = weather_channels
         self.output_channels = output_channels
 
-        self.in_weather_in_season = WeatherCompression(weather_channels, configs.W1, kernel_size=configs.IN_SEASON_KERNEL_SIZE)
-        self.in_weather_pre_season = WeatherCompression(weather_channels, configs.W2, kernel_size=configs.PRE_SEASON_KERNEL_SIZE)
+        self.in_weather_in_season = WeatherCompression(weather_channels, config.W1, kernel_size=config.IN_SEASON_KERNEL_SIZE)
+        self.in_weather_pre_season = WeatherCompression(weather_channels, config.W2, kernel_size=config.PRE_SEASON_KERNEL_SIZE)
 
-        self.enc_1 = Encoder(lidar_channels, configs.C1)
-        self.enc_2 = Encoder(configs.C1, configs.C2)
-        self.enc_3 = Encoder(configs.C2, configs.C3, scale_size=5)
-        self.enc_4 = Encoder(configs.C3 + configs.S1, configs.C4)
-        self.enc_5 = Encoder(configs.C4, configs.C5)
-        self.enc_6 = Encoder(configs.C5, configs.C6)
-        self.enc_7 = Encoder(configs.C6, configs.C7)
-        self.enc_8 = Encoder(configs.C7, configs.C8)
+        self.enc_1 = Encoder(lidar_channels, config.C1)
+        self.enc_2 = Encoder(config.C1, config.C2)
+        self.enc_3 = Encoder(config.C2, config.C3, scale_size=5)
+        self.enc_4 = Encoder(config.C3 + config.S1, config.C4)
+        self.enc_5 = Encoder(config.C4, config.C5)
+        self.enc_6 = Encoder(config.C5, config.C6)
+        self.enc_7 = Encoder(config.C6, config.C7)
+        self.enc_8 = Encoder(config.C7, config.C8)
 
-        self.dec_8 = Decoder(configs.C8 + configs.W1 + configs.W2, configs.C7, skip_channels=configs.C7)
-        self.dec_7 = Decoder(configs.C7, configs.C6, skip_channels=configs.C6)
-        self.dec_6 = Decoder(configs.C6, configs.C5, skip_channels=configs.C5)
-        self.dec_5 = Decoder(configs.C5, configs.C4, skip_channels=configs.C4)
-        self.dec_4 = Decoder(configs.C4, configs.C3 + configs.S1, skip_channels=configs.C3 + configs.S1)
+        self.dec_8 = Decoder(config.C8 + config.W1 + config.W2, config.C7, skip_channels=config.C7)
+        self.dec_7 = Decoder(config.C7, config.C6, skip_channels=config.C6)
+        self.dec_6 = Decoder(config.C6, config.C5, skip_channels=config.C5)
+        self.dec_5 = Decoder(config.C5, config.C4, skip_channels=config.C4)
+        self.dec_4 = Decoder(config.C4, config.C3 + config.S1, skip_channels=config.C3 + config.S1)
 
-        self.final_output = FinalOutput(configs.C3, output_channels)
+        self.final_output = FinalOutput(config.C3 + config.S1, output_channels)
 
     def forward(self, lidar_data, sentinel_data, weather_in_season_data, weather_out_season_data):
         i1 = x1 = lidar_data

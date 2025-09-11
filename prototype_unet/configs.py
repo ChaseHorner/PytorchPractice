@@ -13,7 +13,7 @@ C8 = 4096
 
 #Lidar Info
 _LIDAR_SIZE = [5120, 5120]
-LIDAR_IN_CHANNELS = L1 = 1
+LIDAR_IN_CHANNELS = L1 = 3
 LIDAR_OUT_CHANNELS = C1
 
 #Sentinel Info
@@ -21,8 +21,11 @@ _SEN_SIZE = [256, 256]
 SEN_IN_CHANNELS = 11
 SEN_PERIODS = 21
 
+#Field Info
+field_var_guess = 50
+
 #Number of channels after sentinel data is compressed
-S1 = SEN_IN_CHANNELS * SEN_PERIODS
+S1 = SEN_IN_CHANNELS * SEN_PERIODS + field_var_guess
 
 
 #Weather Info
