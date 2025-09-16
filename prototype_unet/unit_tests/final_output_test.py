@@ -3,7 +3,7 @@ from .. import configs
 import torch
 
 def test_final_output():
-    in_channels = configs.C3 + configs.S1
+    in_channels = configs.C2 + configs.S1
     out_channels = 1
 
     final_output = model.FinalOutput(in_channels, out_channels)
