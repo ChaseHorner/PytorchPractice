@@ -46,16 +46,16 @@ def test_wc_concat():
 
     input_tensor_1 = torch.randn(1, in_channels, input_length_1)
     input_tensor_2 = torch.randn(1, in_channels, input_length_2)
-    x9 = torch.randn(1, configs.C8, configs.BOTTLENECK_SIZE[0], configs.BOTTLENECK_SIZE[1])
+    x7 = torch.randn(1, configs.C7, configs.BOTTLENECK_SIZE[0], configs.BOTTLENECK_SIZE[1])
 
     i3 = wc_1(input_tensor_1)
     i4 = wc_2(input_tensor_2)
 
     i3 = i3.unsqueeze(-1).unsqueeze(-1)
     i4 = i4.unsqueeze(-1).unsqueeze(-1)
-    i3 = i3.expand(-1, -1, x9.shape[2], x9.shape[3])
-    i4 = i4.expand(-1, -1, x9.shape[2], x9.shape[3])
-    x9 = torch.cat([x9, i3, i4], dim=1)
+    i3 = i3.expand(-1, -1, x7.shape[2], x7.shape[3])
+    i4 = i4.expand(-1, -1, x7.shape[2], x7.shape[3])
+    x7 = torch.cat([x7, i3, i4], dim=1)
 
-    assert x9.shape == (1, configs.C8 + out_channels_1 + out_channels_2, configs.BOTTLENECK_SIZE[0], configs.BOTTLENECK_SIZE[1]), \
-        f"Expected shape {(1, configs.C8 + out_channels_1 + out_channels_2, configs.BOTTLENECK_SIZE[0], configs.BOTTLENECK_SIZE[1])}, but got {x9.shape}"
+    assert x7.shape == (1, configs.C7 + out_channels_1 + out_channels_2, configs.BOTTLENECK_SIZE[0], configs.BOTTLENECK_SIZE[1]), \
+        f"Expected shape {(1, configs.C7 + out_channels_1 + out_channels_2, configs.BOTTLENECK_SIZE[0], configs.BOTTLENECK_SIZE[1])}, but got {x7.shape}"

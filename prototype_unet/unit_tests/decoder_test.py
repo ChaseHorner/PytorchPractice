@@ -13,8 +13,8 @@ def test_decoder_basic_scale_two():
         f"Expected shape {(1, 3, 128, 128)}, but got {output_tensor.shape}"    
     
 def test_decoder_start():
-    in_channels = configs.C8 + configs.W1 + configs.W2
-    out_channels = configs.C7
+    in_channels = configs.C7 + configs.W1 + configs.W2
+    out_channels = configs.C6
 
     decoder = model.Decoder(in_channels, out_channels, scale_size = 2)
     input_tensor = torch.randn(1, in_channels, 8, 8)
@@ -25,9 +25,9 @@ def test_decoder_start():
         f"Expected shape {(1, out_channels, 16, 16)}, but got {output_tensor.shape}"
     
 def test_decoder_end():
-    in_channels = configs.C4
-    out_channels = configs.C3 + configs.S1
-    skip_channels = configs.C3 + configs.S1
+    in_channels = configs.C3
+    out_channels = configs.C2 + configs.S1
+    skip_channels = configs.C2 + configs.S1
 
     decoder = model.Decoder(in_channels, out_channels, skip_channels=skip_channels, scale_size = 2)
     input_tensor = torch.randn(1, in_channels, 128, 128)
@@ -38,13 +38,13 @@ def test_decoder_end():
         f"Expected shape {(1, out_channels, 256, 256)}, but got {output_tensor.shape}"
 
 def test_decoder_chain_start():
-    in_channels_1 = configs.C8 + configs.W1 + configs.W2
-    out_channels_1 = configs.C7
-    skip_channels_1 = configs.C7
+    in_channels_1 = configs.C7 + configs.W1 + configs.W2
+    out_channels_1 = configs.C6
+    skip_channels_1 = configs.C6
 
-    in_channels_2 = configs.C7
-    out_channels_2 = configs.C6
-    skip_channels_2 = configs.C6
+    in_channels_2 = configs.C6
+    out_channels_2 = configs.C5
+    skip_channels_2 = configs.C5
 
     dec_1 = model.Decoder(in_channels_1, out_channels_1, skip_channels=skip_channels_1, scale_size=2)
     dec_2 = model.Decoder(in_channels_2, out_channels_2, skip_channels=skip_channels_2, scale_size=2)
@@ -60,27 +60,27 @@ def test_decoder_chain_start():
         f"Expected shape {(1, out_channels_2, 32, 32)}, but got {output_tensor_2.shape}"
     
 def test_decoder_chain_full():
-    dec_8 = model.Decoder(configs.C8 + configs.W1 + configs.W2, configs.C7, skip_channels=configs.C7)
-    dec_7 = model.Decoder(configs.C7, configs.C6, skip_channels=configs.C6)
+    dec_7 = model.Decoder(configs.C7 + configs.W1 + configs.W2, configs.C6, skip_channels=configs.C6)
     dec_6 = model.Decoder(configs.C6, configs.C5, skip_channels=configs.C5)
     dec_5 = model.Decoder(configs.C5, configs.C4, skip_channels=configs.C4)
-    dec_4 = model.Decoder(configs.C4, configs.C3 + configs.S1, skip_channels=configs.C3 + configs.S1)
+    dec_4 = model.Decoder(configs.C4, configs.C3, skip_channels=configs.C3)
+    dec_3 = model.Decoder(configs.C3, configs.C2 + configs.S1, skip_channels=configs.C2 + configs.S1)
 
-    input_tensor = torch.randn(1, configs.C8 + configs.W1 + configs.W2, 8, 8)
-    skip_tensor_8 = torch.randn(1, configs.C7, 16, 16)
-    output_tensor_8 = dec_8(input_tensor, skip_tensor_8)
+    input_tensor = torch.randn(1, configs.C7 + configs.W1 + configs.W2, 8, 8)
+    skip_tensor_7 = torch.randn(1, configs.C6, 16, 16)
+    output_tensor_7 = dec_7(input_tensor, skip_tensor_7)
 
-    skip_tensor_7 = torch.randn(1, configs.C6, 32, 32)
-    output_tensor_7 = dec_7(output_tensor_8, skip_tensor_7)
-    
-    skip_tensor_6 = torch.randn(1, configs.C5, 64, 64)
+    skip_tensor_6 = torch.randn(1, configs.C5, 32, 32)
     output_tensor_6 = dec_6(output_tensor_7, skip_tensor_6)
 
-    skip_tensor_5 = torch.randn(1, configs.C4, 128, 128)
+    skip_tensor_5 = torch.randn(1, configs.C4, 64, 64)
     output_tensor_5 = dec_5(output_tensor_6, skip_tensor_5)
 
-    skip_tensor_4 = torch.randn(1, configs.C3 + configs.S1, 256, 256)
+    skip_tensor_4 = torch.randn(1, configs.C3, 128, 128)
     output_tensor_4 = dec_4(output_tensor_5, skip_tensor_4)
 
-    assert output_tensor_4.shape == (1, configs.C3 + configs.S1, 256, 256), \
-        f"Expected shape {(1, configs.C3 + configs.S1, 256, 256)}, but got {output_tensor_4.shape}"
+    skip_tensor_3 = torch.randn(1, configs.C2 + configs.S1, 256, 256)
+    output_tensor_3 = dec_3(output_tensor_4, skip_tensor_3)
+
+    assert output_tensor_3.shape == (1, configs.C2 + configs.S1, 256, 256), \
+        f"Expected shape {(1, configs.C2 + configs.S1, 256, 256)}, but got {output_tensor_3.shape}"
