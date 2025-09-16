@@ -2,7 +2,7 @@ import torch
 import time
 import configs
 from model import Unet
-from dataGen import get_random_dataloader
+from prototype_unet.data_gen import get_random_dataloader
 import types
 
 # Create a temporary "config module" dynamically
