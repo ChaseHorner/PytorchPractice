@@ -1,91 +1,45 @@
 import os
 import torch
-from torch.utils.data import Dataset
-import rasterio
-import numpy as np
+from torch.utils.data import Dataset, DataLoader
 import configs
 
-
-TOP_DIR = "/path/to/geotiffs"
-
-class GeoTiffDataset(Dataset):
-    def __init__(self, folder_path, transform=None, dtype=torch.float32):
+class FieldDataset(Dataset):
+    def __init__(self, root_dir, input_keys=['lidar', 'sentinel', 'in_season', 'pre_season'], target_key='target'):
         """
-        folder_path: directory with GeoTIFF files
-        transform: optional torchvision transforms
-        dtype: torch tensor type
+        root_dir: folder with subfolders per sample, each containing .pt files
+        input_keys: list of keys for input tensors
+        target_key: key for target tensor
         """
-        self.fields = []
+        self.root_dir = root_dir
+        self.input_keys = input_keys
+        self.target_key = target_key
 
-        for year in os.listdir(folder_path):
-            year_path = os.path.join(folder_path, year)
+        self.samples = []
+        for year in os.listdir(root_dir):
+            year_path = os.path.join(root_dir, year)
             for field in os.listdir(year_path):
-                field_path = os.path.join(folder_path, year, field)
+                field_path = os.path.join(year_path, field)
                 if os.path.isdir(field_path):
-                    files = {'lidar': [], 'sentinel': [], 'in_season': [], 'pre_season': [], 'label': []}
-                    for file in os.listdir(field_path):
-                        if file.endswith('.tif') or file.endswith('.tiff'):
-                            if "aspect" in file or "dem" in file or "slp" in file:
-                                files['lidar'].append(os.path.join(field_path, file))
-                            # elif "sentinel" in file:
-                            else:
-                                files['sentinel'].append(os.path.join(field_path, file))
-                            # elif "in_season" in file:
-                            #     files['in_season'].append(os.path.join(field_path, file))
-                            # elif "pre_season" in file:
-                            #     files['pre_season'].append(os.path.join(field_path, file))
-                            # elif "label" in file:
-                            #     files['label'].append(os.path.join(field_path, file))
-                    self.fields.append(files)
-
-        self.transform = transform
-        self.dtype = dtype
+                    self.samples.append(field_path)
 
     def __len__(self):
-        return len(self.fields)
+        return len(self.samples)
 
     def __getitem__(self, idx):
-        lidar_list, sentinel_list, in_season_list, pre_season_list, label_list = [], [], [], [], []
+        sample_dir = self.samples[idx]
+        lidar = torch.load(os.path.join(sample_dir, 'lidar.pt'))
+        sentinel = torch.load(os.path.join(sample_dir, 'sentinel.pt'))
+        # in_season = torch.load(os.path.join(sample_dir, 'in_season.pt'))
+        # pre_season = torch.load(os.path.join(sample_dir, 'pre_season.pt'))
+        in_season = torch.zeros([configs.WEATHER_IN_CHANNELS, configs.IN_SEASON_DAYS])
+        pre_season = torch.zeros([configs.WEATHER_IN_CHANNELS, configs.PRE_SEASON_DAYS])
+        target = torch.load(os.path.join(sample_dir, 'target.pt'))
 
-        for file_type, paths in self.fields[idx].items():
-            paths.sort() # ensure consistent order, very important!
-
-            for path in paths:
-                with rasterio.open(path) as src:
-                    arr = src.read().astype(np.float32)
-                    if arr.ndim == 2:
-                        arr = arr[None, :, :]  # add channel
-                    tensor = torch.from_numpy(arr).type(self.dtype)
-
-                if file_type == 'lidar':
-                    lidar_list.append(tensor)
-                elif file_type == 'sentinel':
-                    sentinel_list.append(tensor)
-                elif file_type == 'in_season':
-                    in_season_list.append(tensor)
-                elif file_type == 'pre_season':
-                    pre_season_list.append(tensor)
-                elif file_type == 'label':
-                    label_list.append(tensor)
+        return lidar, sentinel, in_season, pre_season, target
 
 
-        lidar_tensor = torch.cat(lidar_list, dim=0) if lidar_list else torch.empty(0)
-        sentinel_tensor = torch.cat(sentinel_list, dim=0) if sentinel_list else torch.empty(0)
-        in_season_tensor = torch.cat(in_season_list, dim=0) if in_season_list else torch.empty(0)
-        pre_season_tensor = torch.cat(pre_season_list, dim=0) if pre_season_list else torch.empty(0)
-        label_tensor = torch.cat(label_list, dim=0) if label_list else torch.empty(0)
+dataset = FieldDataset(r"Z:\prepped_data\processed_tensors", input_keys=['lidar', 'sentinel'])
+dataloader = DataLoader(dataset, batch_size=5, shuffle=True)
 
-        return {
-            'lidar': lidar_tensor,
-            'sentinel': sentinel_tensor,
-            'in_season': in_season_tensor,
-            'pre_season': pre_season_tensor,
-            'label': label_tensor
-        }
-
-# Example usage
-dataset = GeoTiffDataset(TOP_DIR)
-dataloader = torch.utils.data.DataLoader(dataset, batch_size=configs.BATCH_SIZE, shuffle=True)
-
-for batch in dataloader:
-    print(batch.shape)  # (B, bands, H, W)
+for batch_x, batch_y in dataloader:
+    print(batch_x.shape, batch_y.shape)
